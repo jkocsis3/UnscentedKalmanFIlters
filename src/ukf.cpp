@@ -34,7 +34,7 @@ UKF::UKF() {
 	std_a_ = 2;
 
 	// Process noise standard deviation yaw acceleration in rad/s^2
-	std_yawdd_ = 30;
+	std_yawdd_ = .3;
 
 	// Laser measurement noise standard deviation position1 in m
 	std_laspx_ = 0.15;
@@ -67,7 +67,7 @@ UKF::UKF() {
 	weights_ = VectorXd(2 * n_aug_ + 1);
 
 	//define spreading parameter
-	lambda_ = 3 - n_aug_;
+	lambda_ = 3 - n_x_;
 	// the current NIS for radar
 	NIS_radar_ = 0.0;
 
@@ -98,11 +98,11 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		x_ << 1, 1, 1, 1, .1;
 
 		//Initialize the covariance matrix
-		P_ << 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0;
+		P_ <<	0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0;
 
 		//set the time to the TimeStamp in Measurement package
 		time_us_ = meas_package.timestamp_;
@@ -201,8 +201,9 @@ void UKF::Prediction(double delta_t) {
 	Xsig_aug.col(0) = x_aug;
 	for (int i = 0; i<n_aug_; i++)
 	{
+		//TODO keep checking this code with a microscope.
 		Xsig_aug.col(i + 1) = x_aug + sqrt(lambda_ + n_aug_) * sqRtmatrix.col(i);
-		Xsig_aug.col(i + 1) = x_aug - sqrt(lambda_ + n_aug_) * sqRtmatrix.col(i);
+		Xsig_aug.col(i + 1+ n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * sqRtmatrix.col(i);
 	}
 
 	//Now perform the prediction for the augmented Sigma Points
@@ -216,7 +217,7 @@ void UKF::Prediction(double delta_t) {
 		double yawAngle = Xsig_aug(3, i);
 		double yawRate = Xsig_aug(4, i);
 		double longitAccel = Xsig_aug(5, i);
-		double yawNoise = Xsig_aug(5, i);
+		double yawNoise = Xsig_aug(6, i);
 
 		//these will hold the predicted values
 		double predPosX, predPosY;
@@ -242,7 +243,7 @@ void UKF::Prediction(double delta_t) {
 		predPosY = predPosX + .5*longitAccel*delta_t*delta_t*sin(yawAngle);
 		predVelocity = predVelocity + longitAccel*delta_t;
 		predYawAngle = predYawAngle + .5*yawNoise*delta_t*delta_t;
-		predYawRate = predYawRate*yawNoise*delta_t;
+		predYawRate = predYawRate + yawNoise*delta_t;
 
 		//store the predicted values back in to the matrix
 		Xsig_pred_(0, i) = predPosX;
@@ -283,7 +284,17 @@ void UKF::Prediction(double delta_t) {
 			double newValue = value - doublePi;
 			diffX(3) = newValue;
 		}
-		while (diffX(3) < -M_PI) diffX(3) += 2.*M_PI;
+		//while (diffX(3) < -M_PI) diffX(3) += 2.*M_PI;
+		while (diffX(3) < -M_PI)
+		{
+			double value = diffX(3);
+			std::cout << value << std::endl;
+			//below code was not setting diff(3) properly and I was stuck in an endless loop.
+			//diffX(3)-=2.*M_PI;
+			double doublePi = 2 * M_PI;
+			double newValue = value - doublePi;
+			diffX(3) = newValue;
+		}
 
 		P_ = P_ + weights_(i) * diffX * diffX.transpose();
 	}
