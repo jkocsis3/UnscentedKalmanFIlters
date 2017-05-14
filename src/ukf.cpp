@@ -2,6 +2,7 @@
 #include "tools.h"
 #include "Eigen/Dense"
 #include <iostream>
+#include "Eigen/src/StlSupport/StdVector.h"
 
 using namespace std;
 using Eigen::MatrixXd;
@@ -19,6 +20,8 @@ UKF::UKF() {
 
 	// if this is false, radar measurements will be ignored (except during init)
 	use_radar_ = true;
+	//set state dimension
+	n_x_ = 5;
 	
 	// initial state vector
 	//Changed this to match the practice code
@@ -56,14 +59,12 @@ UKF::UKF() {
 	
 	// time when the state is true, in us
 	time_us_ = 0;
-	// Weights of sigma points
-	weights_ = VectorXd(2 * n_aug_ + 1);
-
-	//set state dimension
-	n_x_ = 5;
 
 	//set augmented dimension
 	n_aug_ = 7;
+
+	// Weights of sigma points
+	weights_ = VectorXd(2 * n_aug_ + 1);
 
 	//define spreading parameter
 	lambda_ = 3 - n_aug_;
@@ -165,19 +166,20 @@ void UKF::Prediction(double delta_t) {
   vector, x_. Predict sigma points, the state, and the state covariance matrix.
   */
 
-	//Generate the Sigma points.
-	MatrixXd Xsig = MatrixXd(n_x_, 2 * n_x_ + 1);
-	MatrixXd A = P_.llt().matrixL();
+	//TODO check this, seems like we are generating the sigma points twice here...
+	////Generate the Sigma points.
+	//MatrixXd Xsig = MatrixXd(n_x_, 2 * n_x_ + 1);
+	//MatrixXd A = P_.llt().matrixL();
 
-	Xsig.col(0) = x_;
-	for(int i = 0; i < n_x_; i++)
-	{
-		Xsig.col(i + 1) = x_ + sqrt(lambda_ + n_x_) * A.col(i);
-		Xsig.col(1 + 1 + n_x_) = x_ - sqrt(lambda_ + n_x_) * A.col(i);
-	}
+	//Xsig.col(0) = x_;
+	//for(int i = 0; i < n_x_; i++)
+	//{
+	//	Xsig.col(i + 1) = x_ + sqrt(lambda_ + n_x_) * A.col(i);
+	//	Xsig.col(1 + 1 + n_x_) = x_ - sqrt(lambda_ + n_x_) * A.col(i);
+	//}
 
 	//Augment the Sigma points. 
-	MatrixXd x_aug = MatrixXd(n_aug_);
+	VectorXd x_aug = VectorXd(n_aug_);
 	MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
 	MatrixXd Xsig_aug = MatrixXd(n_aug_, 2 * n_aug_ + 1);
 
@@ -238,7 +240,7 @@ void UKF::Prediction(double delta_t) {
 		//factor in the noise
 		predPosX = predPosX + .5*longitAccel*delta_t*delta_t*cos(yawAngle);
 		predPosY = predPosX + .5*longitAccel*delta_t*delta_t*sin(yawAngle);
-		predVelocity = velocity + longitAccel*delta_t;
+		predVelocity = predVelocity + longitAccel*delta_t;
 		predYawAngle = predYawAngle + .5*yawNoise*delta_t*delta_t;
 		predYawRate = predYawRate*yawNoise*delta_t;
 
@@ -268,11 +270,20 @@ void UKF::Prediction(double delta_t) {
 	//predict state covariance matrix
 	for (int i = 0; i<2 * n_aug_ + 1; i++)
 	{
-		VectorXd diffX = Xsig_pred_.col(i) = x_;
+		VectorXd diffX = Xsig_pred_.col(i) - x_;
 
 		//normalize the angles.
-		while (diffX(3) > M_PI) diffX(3) -= 2 * M_PI;
-		while (diffX(3) < -M_PI) diffX(3) += 2 * M_PI;
+		while (diffX(3) > M_PI)
+		{
+			double value = diffX(3);
+			std::cout << value << std::endl;
+			//below code was not setting diff(3) properly and I was stuck in an endless loop.
+			//diffX(3)-=2.*M_PI;
+			double doublePi = 2 * M_PI;
+			double newValue = value - doublePi;
+			diffX(3) = newValue;
+		}
+		while (diffX(3) < -M_PI) diffX(3) += 2.*M_PI;
 
 		P_ = P_ + weights_(i) * diffX * diffX.transpose();
 	}
