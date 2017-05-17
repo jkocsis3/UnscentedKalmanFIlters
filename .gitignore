@@ -25,6 +25,7 @@ bld/
 #my files
 src/eigen.natvis
 src/GA.CPP
+src/ukf_old.cpp
 
 # Visual Studio 2015 cache/options directory
 .vs/
